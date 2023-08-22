@@ -200,7 +200,7 @@ async function login(usernameInput, passwordInput) {
         loggedInMenu();  
         xmpp.on("stanza", async (stanza) => {
             if (stanza.is("message")) {
-                console.log("Stanza recibida:", stanza.toString());
+                //console.log("Stanza recibida:", stanza.toString()); 
                 const body = stanza.getChild("body");
                 const from =  stanza.attrs.from;
                 if (body) {
@@ -451,23 +451,21 @@ function setPresenceMessage() {
             let presenceAttributes = {};
             let presenceChildren = [];
 
-            // Si el estado es "offline", se establece el atributo type a "unavailable"
             if (status === 'offline') {
                 presenceAttributes.type = 'unavailable';
-            } else if (status !== 'online') { // Para otros estados que no son "online" ni "offline"
+            } else if (status !== 'online') {
                 presenceChildren.push(xml('show', {}, status));
             }
 
-            // Si hay un mensaje de presencia, se añade
             if (message) {
                 presenceChildren.push(xml('status', {}, message));
+                userPresenceMessage = message;  // Actualiza el mensaje de presencia del usuario
             }
 
             const presenceStanza = xml('presence', presenceAttributes, ...presenceChildren);
             
             xmpp.send(presenceStanza);
 
-            // Actualiza el estado de presencia del usuario en la variable global
             userPresenceStatus = status;
 
             console.log(`Estado establecido a "${status}" con el mensaje "${message || 'Ninguno'}".`);
@@ -476,11 +474,76 @@ function setPresenceMessage() {
     });
 }
 
-
 function viewOwnStatus() {
-    // Aquí, simplemente mostramos el estado y mensaje actual.
     console.log(`Tu estado actual es: "${userPresenceStatus}"`);
+    console.log(`Tu mensaje actual es: "${userPresenceMessage}"`);
     loggedInMenu();
+}
+
+async function showUsersAndStatus() {
+    try {
+        const contacts = await getContactDetails();
+        if (contacts.length === 0) {
+            console.log('No tienes contactos en tu lista.');
+        } else {
+            console.log('\nTus contactos:');
+            contacts.forEach(contact => {
+                console.log(`Nombre: ${contact.name}, JID: ${contact.jid}, Estado: ${contact.presence}`);
+            });
+        }
+    } catch (err) {
+        console.error('Error al obtener la lista de contactos:', err.message);
+    }
+    loggedInMenu();
+}
+
+async function getContactDetails() {
+    if (!xmpp) {
+        throw new Error("El cliente XMPP no está conectado. Primero llama al método 'conectar()'.");
+    }
+
+    const iq = xml(
+        "iq",
+        { type: "get", id: "roster" },
+        xml("query", { xmlns: "jabber:iq:roster" })
+    );
+
+    const contacts = {};
+    let waitingForPresences = new Set();
+
+    xmpp.on("stanza", (stanza) => {
+        if (stanza.is("iq") && stanza.attrs.id === "roster") {
+            const query = stanza.getChild('query');
+            if (query) {
+                query.getChildren("item").forEach((item) => {
+                    const jid = item.attrs.jid;
+                    const name = item.attrs.name || jid.split("@")[0];
+                    const subscription = item.attrs.subscription;
+
+                    contacts[jid] = { name, jid, presence: "offline", subscription: subscription || "none" };
+                    waitingForPresences.add(jid);
+                });
+            }
+        } else if (stanza.is("presence")) {
+            const from = stanza.attrs.from;
+            if (from in contacts) {
+                contacts[from].presence = stanza.attrs.type || "online";
+                waitingForPresences.delete(from);
+            }
+        } else if (stanza.is("presence") && stanza.attrs.type === "subscribe") {
+            const from = stanza.attrs.from;
+            if (from in contacts) {
+                contacts[from].subscription = "pending";
+            }
+        }
+    });
+
+    await xmpp.send(iq);
+
+    // Espera un poco para que lleguen los mensajes de presencia
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    return Object.values(contacts);
 }
 
 mainMenu();
