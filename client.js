@@ -54,6 +54,8 @@ async function loggedInMenu() {
     console.log('[1] Mostrar usuarios/contactos y su estado');
     console.log('[2] Salir');
     console.log('[3] Eliminar cuenta');
+    console.log('[4] Agregar Contacto');
+    console.log('[5] Mensaje Privado')
     console.log('===================================');
     
     rl.question('Su opción: ', choice => {
@@ -79,6 +81,9 @@ async function loggedInMenu() {
                     }
                 });
                 break;
+            case '4':
+                addContact();
+                break;
             default:
                 console.log('Lo siento, esa no es una opción válida. Por favor, intente de nuevo.');
                 loggedInMenu();
@@ -87,8 +92,58 @@ async function loggedInMenu() {
     });
 }
 
+async function sendPrivateMessage() {
+    if (!xmpp) {
+        console.log('Por favor, inicie sesión primero.');
+        return loggedInMenu();
+    }
 
-async function register(usernameInput, passwordInput, email) {
+    rl.question('Ingrese el nombre de usuario del destinatario: ', recipient => {
+        rl.question('Ingrese su mensaje: ', message => {
+            const msgStanza = xml(
+                'message',
+                { type: 'chat', to: recipient + '@' + domain },
+                xml('body', {}, message)
+            );
+
+            xmpp.send(msgStanza).then(() => {
+                console.log('Mensaje enviado con éxito.');
+                loggedInMenu();
+            }).catch(err => {
+                console.error('Error al enviar el mensaje:', err.message);
+                loggedInMenu();
+            });
+        });
+    });
+}
+
+
+async function addContact() {
+    if (!xmpp) {
+        console.log('Por favor, inicie sesión primero.');
+        return loggedInMenu();
+    }
+
+    rl.question('Ingrese el nombre de usuario del contacto que desea agregar: ', contactName => {
+        const addContactStanza = xml(
+            'iq',
+            { type: 'set', id: 'add_contact' },
+            xml('query', { xmlns: 'jabber:iq:roster' },
+                xml('item', { jid: contactName + '@' + domain, name: contactName })
+            )
+        );
+
+        xmpp.send(addContactStanza).then(() => {
+            console.log('Contacto agregado con éxito.');
+            loggedInMenu();
+        }).catch(err => {
+            console.error('Error al agregar el contacto:', err.message);
+            loggedInMenu();
+        });
+    });
+}
+
+async function register(usernameInput, passwordInput) {
     return new Promise(async (resolve, reject) => {
         if (xmpp) {
             reject(new Error('Ya existe una conexión.'));
@@ -115,7 +170,6 @@ async function register(usernameInput, passwordInput, email) {
             xml('query', { xmlns: 'jabber:iq:register' },
                 xml('username', {}, username),
                 xml('password', {}, password),
-                xml('email', {}, email)
             )
         );
 
@@ -138,7 +192,7 @@ async function deleteAccount() {
     const errorHandler = (err) => {
         if (err.condition === 'not-authorized') {
             console.log('Cuenta eliminada con éxito.');
-            xmpp.removeListener('error', errorHandler);  // Removemos el manejador de errores después de usarlo
+            xmpp.removeListener('error', errorHandler);  
             logout().then(() => {
                 mainMenu();
             });
@@ -157,7 +211,6 @@ async function deleteAccount() {
     );
 
     xmpp.send(deleteStanza).catch((err) => {
-        // Si hay algún otro error, lo manejamos aquí y removemos el manejador de errores
         xmpp.removeListener('error', errorHandler);
         console.error('Error al eliminar la cuenta:', err.message);
         loggedInMenu();
@@ -224,14 +277,12 @@ function mainMenu() {
                 console.log('\n--- Registro ---');
                 rl.question('Ingrese su nombre de usuario: ', usernameInput => {
                     rl.question('Ingrese su contraseña: ', passwordInput => {
-                        rl.question('Ingrese su correo electrónico: ', email => {
-                            register(usernameInput, passwordInput, email).then(() => {
+                            register(usernameInput, passwordInput).then(() => {
                                 console.log('¡Gracias por registrarse con nosotros!');
                                 loggedInMenu();
                             }).catch(err => {
                                 console.error('Lo siento, hubo un problema:', err.message);
                             });
-                        });
                     });
                 });
                 break;
