@@ -1,3 +1,7 @@
+//Lucia Alejandra Guzman 20262
+//Universidad del valle de guatemala
+//Proyecto Chat
+
 const { client, xml } = require("@xmpp/client");
 const readline = require("readline");
 const net = require('net');
@@ -545,5 +549,84 @@ async function getContactDetails() {
 
     return Object.values(contacts);
 }
+
+function groupConversations() {
+    console.log('\n===================================');
+    console.log('   Conversaciones Grupales   ');
+    console.log('===================================');
+    console.log('\nPor favor, elige una opción:');
+    console.log('[1] Crear un chat grupal');                        
+    console.log('[2] Unirme a un chat grupal');
+    console.log('[3] Enviar un mensaje al chat grupal');   
+    console.log('[4] Regresar al menú principal');  
+    console.log('===================================');
+    
+    rl.question('Su opción: ', choice => {
+        switch (choice) {
+            case '1':
+                createGroupChat();
+                break;
+            case '2':
+                joinGroupChat();
+                break;
+            case '3':
+                sendGroupMessage();
+                break;
+            case '4':
+                loggedInMenu();
+                break;
+            default:
+                console.log('Lo siento, esa no es una opción válida. Por favor, intente de nuevo.');
+                groupConversations();
+                break;
+        }
+    });
+}
+
+function createGroupChat() {
+    rl.question('Ingrese el nombre del chat grupal que desea crear: ', roomName => {
+        const roomJid = `${roomName}@conference.${domain}`;
+        const presenceStanza = xml(
+            'presence',
+            { to: `${roomJid}/${username}` }
+        );
+        xmpp.send(presenceStanza);
+        console.log(`Te has unido al chat grupal: ${roomName}`);
+        groupConversations();
+    });
+}
+
+function joinGroupChat() {
+    rl.question('Ingrese el nombre del chat grupal al que desea unirse: ', roomName => {
+        const roomJid = `${roomName}@conference.${domain}`;
+        const presenceStanza = xml(
+            'presence',
+            { to: `${roomJid}/${username}` }
+        );
+        xmpp.send(presenceStanza);
+        console.log(`Te has unido al chat grupal: ${roomName}`);
+        groupConversations();
+    });
+}
+
+function sendGroupMessage() {
+    rl.question('Ingrese el nombre del chat grupal al que desea enviar el mensaje: ', roomName => {
+        const roomJid = `${roomName}@conference.${domain}`;
+        rl.question('Ingrese el mensaje: ', message => {
+            const messageStanza = xml(
+                'message',
+                { to: roomJid, type: 'groupchat' },
+                xml('body', {}, message)
+            );
+            xmpp.send(messageStanza);
+            console.log('Mensaje enviado al chat grupal.');
+            groupConversations();
+        });
+    });
+}
+
+
+
+
 
 mainMenu();
