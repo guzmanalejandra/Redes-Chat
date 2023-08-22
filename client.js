@@ -1,4 +1,3 @@
-
 const { client, xml } = require("@xmpp/client");
 const readline = require("readline");
 const net = require('net');
@@ -18,6 +17,77 @@ let password = null;
 const service = "xmpp://alumchat.xyz:5222";
 const domain = "alumchat.xyz";
 
+async function showUsersAndStatus() {
+    if (!xmpp) {
+        console.log('Por favor, inicie sesión primero.');
+        return loggedInMenu();
+    }
+
+    // Send roster request
+    const rosterRequest = xml(
+        'iq',
+        { type: 'get', id: 'roster_1' },
+        xml('query', { xmlns: 'jabber:iq:roster' })
+    );
+
+    xmpp.send(rosterRequest);
+
+    // Listen for the roster response
+    xmpp.on('stanza', stanza => {
+        if (stanza.is('iq') && stanza.attrs.id === 'roster_1') {
+            const contacts = stanza.getChildrenByFilter(child => child.is('item'));
+            console.log('\nLista de usuarios y su estado:');
+            contacts.forEach(contact => {
+                const contactName = contact.attrs.name || contact.attrs.jid;
+                const subscription = contact.attrs.subscription;
+                console.log(`${contactName} - ${subscription === 'both' ? 'En línea' : 'Desconectado'}`);
+            });
+        }
+    });
+}
+
+async function loggedInMenu() {
+    console.log('\n===================================');
+    console.log('   Menú de Usuario   ');
+    console.log('===================================');
+    console.log('\nPor favor, elige una opción:');
+    console.log('[1] Mostrar usuarios/contactos y su estado');
+    console.log('[2] Salir');
+    console.log('[3] Eliminar cuenta');
+    console.log('===================================');
+    
+    rl.question('Su opción: ', choice => {
+        switch (choice) {
+            case '1':
+                showUsersAndStatus();
+                break;
+            case '2':
+                logout().then(() => {
+                    console.log('Has cerrado sesión.');
+                    mainMenu();
+                }).catch(err => {
+                    console.error('Lo siento, hubo un problema:', err.message);
+                    loggedInMenu();
+                });
+                break;
+            case '3':
+                rl.question('¿Está seguro de que desea eliminar su cuenta? (sí/no): ', response => {
+                    if (response.toLowerCase() === 'sí' || response.toLowerCase() === 'si') {
+                        deleteAccount();
+                    } else {
+                        loggedInMenu();
+                    }
+                });
+                break;
+            default:
+                console.log('Lo siento, esa no es una opción válida. Por favor, intente de nuevo.');
+                loggedInMenu();
+                break;
+        }
+    });
+}
+
+
 async function register(usernameInput, passwordInput, email) {
     return new Promise(async (resolve, reject) => {
         if (xmpp) {
@@ -36,7 +106,7 @@ async function register(usernameInput, passwordInput, email) {
         try {
             await xmpp.start();
         } catch (err) {
-            reject(new Error('Error al establecer la conexión.'));
+            reject(new Error(err.message));
         }
 
         const registerStanza = xml(
@@ -50,10 +120,47 @@ async function register(usernameInput, passwordInput, email) {
         );
 
         xmpp.send(registerStanza).then(() => {
-            resolve();
+            console.log('¡Gracias por registrarse con nosotros!');
+            resolve(); 
         }).catch((err) => {
             reject(new Error('Error al registrar el usuario.'));
         });
+    });
+}
+
+async function deleteAccount() {
+    if (!xmpp) {
+        console.log('Por favor, inicie sesión primero.');
+        return;
+    }
+
+    // Manejador de errores específico para la eliminación de la cuenta
+    const errorHandler = (err) => {
+        if (err.condition === 'not-authorized') {
+            console.log('Cuenta eliminada con éxito.');
+            xmpp.removeListener('error', errorHandler);  // Removemos el manejador de errores después de usarlo
+            logout().then(() => {
+                mainMenu();
+            });
+        }
+    };
+
+    // Agregamos el manejador de errores
+    xmpp.on('error', errorHandler);
+
+    const deleteStanza = xml(
+        'iq',
+        { type: 'set', id: 'delete_account' },
+        xml('query', { xmlns: 'jabber:iq:register' },
+            xml('remove')
+        )
+    );
+
+    xmpp.send(deleteStanza).catch((err) => {
+        // Si hay algún otro error, lo manejamos aquí y removemos el manejador de errores
+        xmpp.removeListener('error', errorHandler);
+        console.error('Error al eliminar la cuenta:', err.message);
+        loggedInMenu();
     });
 }
 
@@ -67,30 +174,38 @@ async function login(usernameInput, passwordInput) {
         password: password,
     });
 
-    xmpp.on("online", async () => {
+    const onlineListener = async () => {
         await xmpp.send(xml("presence"));
-    });
+        loggedInMenu();  
+    };
+
+    xmpp.on("online", onlineListener);
 
     try {
         await xmpp.start();
+        return true;  // Retorna true si el login es exitoso
     } catch (err) {
+        xmpp.removeListener("online", onlineListener); // Remove the online listener
         if (err.condition === 'not-authorized') {
-            throw new Error('\\nCredenciales incorrectas! Intente de nuevo.');
+            console.error('\nCredenciales incorrectas! Intente de nuevo.');
         } else {
-            throw err;
+            console.error('Lo siento, hubo un problema:', err.message);
         }
+        return false;  // Retorna false si el login falla
     }
 }
 
 async function logout() {
     if (!xmpp) {
-        throw new Error("Error en la conexion, intenta de nuevo.");
+        rl.close();
+        return;
     }
 
     await xmpp.stop();
     xmpp = null;
     username = null;
     password = null;
+    console.log('Desconectado exitosamente.');
 }
 
 function mainMenu() {
@@ -112,10 +227,9 @@ function mainMenu() {
                         rl.question('Ingrese su correo electrónico: ', email => {
                             register(usernameInput, passwordInput, email).then(() => {
                                 console.log('¡Gracias por registrarse con nosotros!');
-                                mainMenu();
+                                loggedInMenu();
                             }).catch(err => {
                                 console.error('Lo siento, hubo un problema:', err.message);
-                                mainMenu();
                             });
                         });
                     });
@@ -125,19 +239,20 @@ function mainMenu() {
                 console.log('\n--- Iniciar sesión ---');
                 rl.question('Nombre de usuario: ', usernameInput => {
                     rl.question('Contraseña: ', passwordInput => {
-                        login(usernameInput, passwordInput).then(() => {
-                            console.log('¡Bienvenido de nuevo!');
-                            mainMenu();
-                        }).catch(err => {
-                            console.error('Lo siento, hubo un problema:', err.message);
-                            mainMenu();
+                        login(usernameInput, passwordInput).then((success) => {
+                            if (success) {
+                                console.log('¡Bienvenido de nuevo!');
+                            } else {
+                                console.log("")
+                                mainMenu()
+                            }
                         });
                     });
                 });
                 break;
             case '3':
                 logout().then(() => {
-                    console.log('¡Gracias por usar nuestra aplicación! ¡Hasta pronto!');
+                    console.log('¡Gracias por usar Alumnchat! ¡Hasta pronto!');
                     rl.close();
                 }).catch(err => {
                     console.error('Lo siento, hubo un problema:', err.message);
