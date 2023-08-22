@@ -3,7 +3,6 @@ const readline = require('readline');
 const { encode } = require('js-base64');
 const tls = require('tls');
 
-
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -30,7 +29,7 @@ function menubar() {
                 login();
                 break;
             case '2':
-                register(); 
+                signUp(); 
                 break;
             case '3':
                 console.log('Adiós');
@@ -43,27 +42,37 @@ function menubar() {
     });
 }
 
-function submenu() {
-    console.log('----- Menú de Comunicación -----');
-    console.log('1. Mostrar todos los usuarios/contactos y su estado');
-    console.log('2. Agregar un usuario a los contactos');
-    console.log('3. Mostrar detalles de un usuario/contacto');
-    console.log('4. Enviar mensaje a un usuario/contacto');
-    console.log('5. Mostrar todos los detalles de un usuario/contacto');
-    console.log('6. Definir mensaje de presencia');
-    console.log('7. Enviar/recibir notificaciones de presencia');
-    console.log('8. Enviar/recibir archivos');
-    console.log('9. Regresar al menú principal');
-    rl.question('Seleccione una opción: ', (answer) => {
-        switch (answer) {
-            //Falta la implementacion de los casos
-            case '9':
-                menubar();
-                break;
-            default:
-                console.log('Opción inválida');
-                submenu();
-        }
+function signUp() {
+    client.connect(5222, 'alumchat.xyz', function() {
+        // Conexión con el servidor
+        client.write("<stream:stream to='alumchat.xyz' xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' version='1.0'>");
+    });
+
+    // Solicitando datos al usuario
+    rl.question("Usuario: ", (username) => {
+        rl.question("Contraseña: ", (password) => {
+            client.on('data', function(data) {
+                if (data.toString().includes('<stream:features>')) {
+                    // Envía petición de registro
+                    const xmlRegister = `
+                    <iq type="set" id="reg_1" mechanism='PLAIN'>
+                        <query xmlns="jabber:iq:register">
+                            <username>${username}</username>
+                            <password>${password}</password>
+                        </query>
+                    </iq>
+                    `;
+                    client.write(xmlRegister);
+                } else if (data.toString().includes('<iq type="result"')) {
+                    // Registro completado con éxito
+                    console.log('Registro exitoso');
+                    showMenu();
+                } else if (data.toString().includes('<iq type="error"')) {
+                    // Hubo un error durante el registro
+                    console.log('Error al registrar', data.toString());
+                }
+            });
+        });
     });
 }
 
@@ -128,17 +137,6 @@ function handleData(data) {
     }
 }
 
-function sendRegisterRequest() {
-    const registerRequest = `
-    <iq type='set' id='reg1'>
-      <query xmlns='jabber:iq:register'>
-        <username>${jid}</username>
-        <password>${password}</password>
-      </query>
-    </iq>`;
-    client.write(registerRequest);
-}
-
 function upgradeToTLS() {
     const secureSocket = tls.connect({
         socket: client, 
@@ -154,7 +152,7 @@ function upgradeToTLS() {
     });
 }
 
-function sendRegisterRequest(jid, password) {
+function sendRegisterRequest() {
     const registerRequest = `
     <iq type='set' id='reg1'>
       <query xmlns='jabber:iq:register'>
@@ -165,6 +163,7 @@ function sendRegisterRequest(jid, password) {
     client.write(registerRequest);
 }
 
+
 function sendAuthRequest(jid, password) {
     const authRequest = `<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>${encode(
         '\0' + jid + '\0' + password
@@ -172,31 +171,29 @@ function sendAuthRequest(jid, password) {
     client.write(authRequest);
 }
 
-
-function register() {
-    console.log('\nRegistrarse:');
-    rl.question('Username: ', jid => {
-        rl.question('Password: ', password => {
-            if (!client.connected) {
-                client.connect(5222, 'alumchat.xyz', () => {
-                    console.log('\nEstableciendo conexión con Alumnchat.xyz para registro.');
-                    client.write(`<?xml version='1.0'?>
-    <stream:stream to='alumchat.xyz' xmlns='jabber:client' xmlns:stream='http://etherx.jabber.org/streams' version='1.0'>`);
-                });
-            }
-            
-            const registerRequest = `
-    <iq type='set' id='reg1'>
-      <query xmlns='jabber:iq:register'>
-        <username>${jid}</username>
-        <password>${password}</password>
-      </query>
-    </iq>`;
-            client.write(registerRequest);
-        });
+function submenu() {
+    console.log('----- Menú de Comunicación -----');
+    console.log('1. Mostrar todos los usuarios/contactos y su estado');
+    console.log('2. Agregar un usuario a los contactos');
+    console.log('3. Mostrar detalles de un usuario/contacto');
+    console.log('4. Enviar mensaje a un usuario/contacto');
+    console.log('5. Mostrar todos los detalles de un usuario/contacto');
+    console.log('6. Definir mensaje de presencia');
+    console.log('7. Enviar/recibir notificaciones de presencia');
+    console.log('8. Enviar/recibir archivos');
+    console.log('9. Regresar al menú principal');
+    rl.question('Seleccione una opción: ', (answer) => {
+        switch (answer) {
+            //Falta la implementacion de los casos
+            case '9':
+                menubar();
+                break;
+            default:
+                console.log('Opción inválida');
+                submenu();
+        }
     });
 }
-
 
 function handleClose() {
     console.log('\nConexión cerrada.');
