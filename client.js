@@ -212,14 +212,15 @@ async function login(usernameInput, passwordInput) {
                     const sender = from.split('@')[0];
                     if(stanza.getChildText("filename")) {
                         const fileName = stanza.getChildText("filename");
-                        const fileData = messageText;
-                        const saveDir = './recived_files';
+                        const fileData = stanza.getChildText("filedata");
+                        const saveDir = './imagesreceived';
                         const savePath = path.join(saveDir, fileName);
-                        await this.saveBase64ToFile(fileData, savePath);
+                        await saveBase64ToFile(fileData, savePath);
                         console.log(`\nArchivo recibido de ${sender}:`, fileName);
                     } else {
                         console.log(`\nMensaje recibido de ${sender}:`, messageText);
                     }
+                    
                 }
             } else if (stanza.is('presence') && stanza.attrs.type === 'subscribe') {
                 const from = stanza.attrs.from;
@@ -422,32 +423,59 @@ function addContactToRoster(jid, alias) {
     });
 }
 
+
 function sendPrivateMessage(recipient) {
     if (!recipient) {
-        rl.question('Ingrese el nombre de usuario al que desea enviar el mensaje: ', recipientInput => {
-            loopSendMessage(recipientInput);
+        rl.question('Ingrese el nombre de usuario al que desea enviar el mensaje o imagen: ', recipientInput => {
+            loopSendMessageOrImage(recipientInput);
         });
     } else {
-        loopSendMessage(recipient);
+        loopSendMessageOrImage(recipient);
     }
 }
 
-function loopSendMessage(recipient) {
-    rl.question('Ingrese el mensaje (o escriba "salirchat" para terminar): ', messageText => {
-        if (messageText.toLowerCase() === 'salirchat') {
+function loopSendMessageOrImage(recipient) {
+    rl.question('¿Quieres enviar un mensaje o una imagen? (mensaje/imagen) o escriba "salirchat" para terminar: ', choice => {
+        if (choice.toLowerCase() === 'salirchat') {
             loggedInMenu();
             return;
         }
-        const messageStanza = xml(
-            'message',
-            { to: `${recipient}@${domain}`, type: 'chat' },
-            xml('body', {}, messageText)
-        );
-        xmpp.send(messageStanza);
-        console.log(`Mensaje enviado a ${recipient}.`);
-        loopSendMessage(recipient);  // Continúa solicitando más mensajes para el mismo destinatario.
+        
+        if (choice.toLowerCase() === 'mensaje') {
+            rl.question('Ingrese el mensaje: ', messageText => {
+                const messageStanza = xml(
+                    'message',
+                    { to: `${recipient}@${domain}`, type: 'chat' },
+                    xml('body', {}, messageText)
+                );
+                xmpp.send(messageStanza);
+                console.log(`Mensaje enviado a ${recipient}.`);
+                loopSendMessageOrImage(recipient); 
+            });
+        } else if (choice.toLowerCase() === 'imagen') {
+            const imagePath = './imagessent/chems.png';
+            readFileAsBase64(imagePath).then(base64Data => {
+                const messageStanza = xml(
+                    'message',
+                    { to: `${recipient}@${domain}`, type: 'chat' },
+                    xml('filename', {}, 'chems.png'),
+                    xml('filedata', {}, base64Data)
+                );
+                xmpp.send(messageStanza);
+                console.log(`Imagen enviada a ${recipient}.`);
+                loopSendMessageOrImage(recipient);
+            }).catch(err => {
+                console.error('Error al enviar la imagen:', err.message);
+                loopSendMessageOrImage(recipient);
+            });
+        } else {
+            console.log('Opción no válida. Por favor, intente de nuevo.');
+            loopSendMessageOrImage(recipient);
+        }
     });
 }
+
+
 
 function setPresenceMessage() {
     rl.question('Ingrese el estado (online, away, dnd, xa, offline): ', status => {
@@ -610,19 +638,53 @@ function joinGroupChat() {
 }
 
 function sendGroupMessage() {
-    rl.question('Ingrese el nombre del chat grupal al que desea enviar el mensaje: ', roomName => {
+    rl.question('Ingrese el nombre del chat grupal al que desea enviar el mensaje o imagen: ', roomName => {
         const roomJid = `${roomName}@conference.${domain}`;
-        rl.question('Ingrese el mensaje: ', message => {
-            const messageStanza = xml(
-                'message',
-                { to: roomJid, type: 'groupchat' },
-                xml('body', {}, message)
-            );
-            xmpp.send(messageStanza);
-            console.log('Mensaje enviado al chat grupal.');
-            groupConversations();
+        rl.question('¿Quieres enviar un mensaje o una imagen? (mensaje/imagen): ', choice => {
+            if (choice.toLowerCase() === 'mensaje') {
+                rl.question('Ingrese el mensaje: ', message => {
+                    const messageStanza = xml(
+                        'message',
+                        { to: roomJid, type: 'groupchat' },
+                        xml('body', {}, message)
+                    );
+                    xmpp.send(messageStanza);
+                    console.log('Mensaje enviado al chat grupal.');
+                    groupConversations();
+                });
+            } else if (choice.toLowerCase() === 'imagen') {
+                const imagePath = './imagessent/chems.png';
+                readFileAsBase64(imagePath).then(base64Data => {
+                    const messageStanza = xml(
+                        'message',
+                        { to: roomJid, type: 'groupchat' },
+                        xml('filename', {}, 'chems.png'),
+                        xml('filedata', {}, base64Data)
+                    );
+                    xmpp.send(messageStanza);
+                    console.log(`Imagen enviada al chat grupal.`);
+                    groupConversations();
+                }).catch(err => {
+                    console.error('Error al enviar la imagen:', err.message);
+                    groupConversations();
+                });
+            } else {
+                console.log('Opción no válida. Por favor, intente de nuevo.');
+                sendGroupMessage();
+            }
         });
     });
+}
+
+
+async function saveBase64ToFile(base64Data, savePath) {
+    const buffer = Buffer.from(base64Data, 'base64');
+    await fs.promises.writeFile(savePath, buffer);
+}
+
+async function readFileAsBase64(filePath) {
+    const buffer = await fs.promises.readFile(filePath);
+    return buffer.toString('base64');
 }
 
 
