@@ -281,6 +281,8 @@ async function addContacts() {
     });
 }
 
+
+
 function mainMenu() {
     console.log('\n===================================');
     console.log('   Bienvenido a ALUMNCHAT!   ');
@@ -335,6 +337,24 @@ function mainMenu() {
                 mainMenu();
                 break;
         }
+    });
+}
+
+async function showContactDetails() {
+    rl.question('Ingrese el nombre de usuario del contacto cuyos detalles desea mostrar: ', async (contactUsername) => {
+        const contactJID = `${contactUsername}@${domain}`;
+        const contactDetails = await getContactDetails(contactJID);
+
+        if (contactDetails) {
+            console.log('\nDetalles del contacto:');
+            console.log(`Nombre de usuario: ${contactDetails.name}`);
+            console.log(`Estado de presencia: ${contactDetails.presence}`);
+            console.log(`Mensaje de presencia: ${contactDetails.statusMessage || 'Ninguno'}`);
+        } else {
+            console.log(`No se encontraron detalles para el contacto: ${contactUsername}`);
+        }
+
+        loggedInMenu();
     });
 }
 
