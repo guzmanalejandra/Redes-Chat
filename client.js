@@ -51,16 +51,16 @@ async function loggedInMenu() {
                 manageContactsMenu();
                 break;
             case '3':
-                showContactDetails();    // Asegúrate de implementar esta función
+                showContactDetails();    
                 break;
             case '4':
                 showUsersAndStatus();
                 break;
             case '5':
-                groupConversations();    // Asegúrate de implementar esta función
+                groupConversations();    
                 break;
             case '6':
-                setPresenceMessage();    // Asegúrate de implementar esta función
+                setPresenceMessage();   
                 break;
             case '7':
                 rl.question('¿Está seguro de que desea eliminar su cuenta? (sí/no): ', response => {
@@ -483,6 +483,7 @@ function loopSendMessageOrImage(recipient) {
                 );
                 xmpp.send(messageStanza);
                 console.log(`Imagen enviada a ${recipient}.`);
+                console.log('Envío de imagen completado.');
                 loopSendMessageOrImage(recipient);
             }).catch(err => {
                 console.error('Error al enviar la imagen:', err.message);
